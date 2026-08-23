@@ -1,0 +1,49 @@
+{
+  "account_master_file": "account_master.csv",
+  "date_dayfirst_default": true,
+  "date_dayfirst_by_bank": {
+    "CITI": true,
+    "DB": true,
+    "HSBC": true,
+    "SC": true
+  },
+  "scan_header_rows": 100,
+  "scan_metadata_rows": 80,
+  "scan_metadata_columns": 50,
+  "minimum_header_score": 8,
+  "forward_fill_dates": true,
+  "use_statement_date_when_entry_date_missing": false,
+  "exclude_zero_amount": true,
+  "account_overrides": {
+    "CITI|863645018|USD": "0863645018",
+    "CITI|863645026|SGD": "0863645026"
+  },
+  "header_aliases": {
+    "CUSTOMER_REFERENCE": [
+      "Customer Reference",
+      "Customer Ref",
+      "Client Reference",
+      "Your Reference",
+      "Payment Reference",
+      "E-form Number",
+      "Eform Number",
+      "Customer Reference Number"
+    ],
+    "TRANSACTION_DESCRIPTION": [
+      "Transaction Description",
+      "Description",
+      "Narrative",
+      "Transaction Details",
+      "Details",
+      "Particulars",
+      "Remarks"
+    ],
+    "TRANSACTION_AMOUNT": [
+      "Transaction Amount",
+      "Amount",
+      "Signed Amount",
+      "Booking Amount",
+      "Transaction Amount in Account Currency"
+    ]
+  }
+}
