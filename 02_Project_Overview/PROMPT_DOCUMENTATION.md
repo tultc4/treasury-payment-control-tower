@@ -1,43 +1,68 @@
-# Prompt Documentation — how AI was used to build this project
+# Prompt Documentation — sample input, sample output & step-by-step usage guide
 
-**Tool:** Claude (Claude Code, agentic coding assistant) · **Role split:** AI built and tested; the treasury owner decided every business rule, approved every change, and verified outputs against real files.
+*So any FA member can replicate the full workflow independently, using only the files in this package. No installation is needed for the dashboard (a browser is enough); Python is only needed if you also want to run the parsers.*
 
 ---
 
-## 1. Working method
+## A. Sample input (included in this package)
 
-Every feature followed the same loop:
+| File | Location | What it is |
+|---|---|---|
+| `AP_PAYMENT_SAMPLE_SANITIZED.xlsx` | `07_Demo_Data/` | A parsed AP batch: 18 payment groups · 6 entities · 5 currencies, in the parser's output format (`PAYMENT_LIST` + `PARSE_CONTROL` sheets). Two rows are deliberately incomplete (one missing value date, one missing account) so the validation workflow has something to catch. 100% synthetic — no real vendor, account or amount. |
+| `BANK_RESULT_SAMPLE.xlsx` | `07_Demo_Data/` | The matching bank creation result: 13 exact matches, 1 amount difference (+100), 1 wrong account, 1 SWIFT branch-code case. |
 
-> **Business prompt (owner) → AI builds → AI tests on real batch data in a real browser → owner reviews the result → commit.**
+For the parser step, any real AP payment-list Excel works (place files in an `input_ap/` folder); the sample above already IS parser output, so you can skip straight to Step 2.
 
-Prompts were written in Vietnamese as plain business requirements, not technical specs — the domain knowledge stayed with the treasury owner, the implementation with the AI. Example (verbatim):
+## B. Step-by-step usage guide
 
-> *"chỉ được đi lệnh thứ 4 hàng tuần, nếu tuần cuối trong tháng có ngày cuối tháng − 3 không dính thứ 4 thì không được làm lệnh… làm đến hết năm 2026"*
-> → became the 2026 run-day calendar engine (35 run days, 17 blocked Wednesdays) — rules encoded exactly as dictated, then verified date-by-date.
+**Step 0 — Open the tool.** Double-click `03_Source_Code/dashboard/index.html` (or open https://tultc4.github.io/treasury-payment-dashboard/). You should see the **Control Tower** home, empty.
 
-## 2. Prompt patterns that shaped the product
+**Step 1 — (Optional) Parse raw AP files.**
+```
+cd 03_Source_Code/ap_parser
+pip install -r requirements.txt
+python ap_payment_template_parser_fixed_v4.py --input <folder of AP files> --output AP_PAYMENT_TEMPLATE_OUTPUT.xlsx --date 2026-08-19
+```
+✅ *Expected:* console prints one reconciliation line per file and ends with `PARSE CONTROL: n/n file(s) reconciled`. The output workbook has `PAYMENT_LIST` + `PARSE_CONTROL` sheets.
 
-**a. Role-stacked review panels.** Instead of "review my app", the owner prompted AI to act as *ten reviewers at once* — treasury operator, QA tester, treasury manager, CFO, CEO, auditor, IT architect, UX designer, hackathon judge, product manager — each with explicit questions to answer. This produced the 14-finding QA audit (all fixed), the exception-first redesign of the home screen, and the Top-10 change list that was then implemented in full.
+**Step 2 — Import the batch.** Go to **Payment List** → click the ⬆ upload icon → choose `AP_PAYMENT_SAMPLE_SANITIZED.xlsx`.
+✅ *Expected:* toast `Imported AP summary … (18 total payment lines) · parse control 1/1 file(s) reconciled`; the table shows 18 rows with Payment Bank / Method pre-filled.
 
-**b. Control-first prompts.** The strongest features came from control questions, not feature requests. Example (verbatim):
+**Step 3 — Fix what validation found.** A red **"Needs manual fix · 1"** box appears → click **Go to next fix** → the row missing its value date flashes.
+✅ *Fix it:* in the same card, set **Set Value Date** = `2026-08-19` → **Apply Filtered** → read the confirmation dialog (scope + consequences) → OK. An **↩ Undo last bulk** button appears.
 
-> *"làm sao tôi biết được bạn parse đủ thông tin từ file AP list hay không, lỡ parse thiếu thì sao — cần cho 1 control chỗ này"*
-> → became the **Parse Completeness Control**: every candidate source row must reconcile (kept + excluded-by-reason = scanned), written to a PARSE_CONTROL sheet and surfaced on the dashboard.
+**Step 4 — Export ERP files.** Go to **ERP Export** → every entity card shows READY → click **Download CSV** on any entity.
+✅ *Expected:* a CSV named `ERP_UPLOAD_<ENTITY>_….csv` with the header:
+```
+ORG_ID,SUPPLIER_NUM,AP_INVOICE_NUMBER,EFORM_NUMBER,PAYMENT_AMOUNT,DESCRIPTION,PAYMENT_METHOD,CHARGES_INDICATOR,ORDERING_PARTY,PURPOSE_CODE,,Value date,CREATED_BY
+```
+and one row per payment (e.g. `…,DEMOINV26001,FA-PM260801,57728.70,…`). A payment with a blocked reference, missing field or zero amount can never appear in this file.
 
-**c. Honesty constraints.** Submission-phase prompts explicitly forbade fabrication: *"Do not invent PASS — if chưa test thì ghi NOT TESTED"*, *"impact numbers are not fabricated — use placeholders labeled 'to be validated'"*. The test evidence therefore contains real NOT-TESTED entries, and the deck's unmeasured KPIs are labeled placeholders.
+**Step 5 — Reconcile the bank result.** Go to **Bank Creation** → upload icon → `BANK_RESULT_SAMPLE.xlsx`.
+✅ *Expected:* summary chips read **Payments in result 15 · Matched (CREATED) 13 · Diff to review 2**. Click the red **Diff to review** chip → it jumps to the first difference and the Difference column names the exact field (`Amount: bank … vs ours …`). Click again → second difference (wrong account). Type the bank's account into that row's Vendor Bank Account cell → the Match badge flips to **TRUE** instantly. A ⚠ appears on one SWIFT ending `B01` (branch-code review case).
 
-**d. Terminology challenges.** The owner challenged AI outputs the way an auditor would — e.g. rejecting the word *"settlement"* (the tool confirms a **debit on our own account**, not beneficiary settlement) and challenging a "7,000-row" figure until AI measured the physical file (8,368 rows, 2021→2026) and reconciled it with the owner's own volume estimate.
+**Step 6 — Approval email.** Tick **Select all matched** → click the ✉ icon.
+✅ *Expected:* a drafted email — subject `[Oversea] - Approval Payment - <date> - Citi bank`, body with per-entity counts, and a **Download attachment (.xlsx)** holding a PAYMENT LIST sheet and a per-currency SUMMARY sheet.
 
-**e. Scope freeze.** A final "SUBMISSION FREEZE" prompt switched the AI from building to hardening: *stability > features, clarity > complexity, remove/merge/hide anything that doesn't support a treasury decision* — producing this cleaned package rather than more functionality.
+**Step 7 — Debit confirmation & cash sufficiency.** Go to **Bank Debit** / **Cash Position** (with your own T-1 statement file parsed by `03_Source_Code/bank_statement_parser/`).
+✅ *Rule to verify:* a payment is marked DEBIT CONFIRMED only when its transaction appears in the statement — a balance movement alone never confirms anything.
 
-## 3. What AI produced under those prompts
+**Step 8 — Exceptions & audit.** Go to **Exceptions** → give one item an Owner and set Status = Resolved (the bell count drops). Go to **Admin → Audit log**.
+✅ *Expected:* every action you just performed is listed — import, parse control result, bulk update, ERP export, inline edit, exception status — each with who + when.
 
-Two Python parsers (hardened against real-file edge cases: Vietnamese headers, dual amount columns, sheets restating the same payments, headers on row 5, DD/MM-vs-MM/DD ambiguity), the single-file dashboard with its control logic, the automated browser test runs on real batches (46 payments / 333 statement lines), this documentation set, the 6-slide deck, and the narrated demo video (script, screen-drive and voice-over all AI-generated, verified frame-by-frame).
+## C. Sample output summary (what a correct replication looks like)
 
-## 4. What stayed human
+| Checkpoint | Expected value |
+|---|---|
+| Import toast | 18 payment lines · parse control 1/1 reconciled |
+| Needs manual fix | 1 (missing value date) |
+| ERP validation | 0 blocking issues after Step 3 |
+| Bank reconciliation | 13 CREATED · 2 DIFF · 1 SWIFT ⚠ |
+| After inline fix | DIFF count drops to 1; edited row = TRUE |
+| Audit log | ≥ 6 events, newest first, all `by <operator name>` |
 
-Every payment rule and bank mapping (dictated, not guessed) · every approval of a change before commit · every override and its written reason · the decision that **nothing pays automatically** · final wording of every judge-facing claim.
+## D. Using it with your own data
 
-## 5. One-line summary for scoring
-
-> AI was used as a build-and-test engine driven by treasury-language prompts; the human supplied the rules, challenged the outputs like an auditor, and kept every money decision. The result is deterministic, evidenced software — not AI output taken on trust.
+1. Put your entities' AP Excel files in one folder and run Step 1 with your run date — the parser detects entity from the filename and reconciles every row in `PARSE_CONTROL`.
+2. Entity/bank/method rules and account masters are data, not code — see `04_Architecture/ARCHITECTURE.md` and the Admin screen. Adding an entity or bank is configuration.
+3. Everything runs locally in the browser; no payment data ever leaves the machine.
