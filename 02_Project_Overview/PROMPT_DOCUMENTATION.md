@@ -38,6 +38,11 @@ ORG_ID,SUPPLIER_NUM,AP_INVOICE_NUMBER,EFORM_NUMBER,PAYMENT_AMOUNT,DESCRIPTION,PA
 ```
 and one row per payment (e.g. `…,DEMOINV26001,FA-PM260801,57728.70,…`). A payment with a blocked reference, missing field or zero amount can never appear in this file.
 
+> ℹ️ **Duplicate-payment control:** the references you just exported are now in the permanent
+> **reference history register** (Admin → Payment reference history). If you re-import the same
+> AP file, those payments are flagged `DUPLICATE_IN_BANK` and blocked from export — that is the
+> control working. To repeat this demo from scratch, click **Clear register…** in Admin first.
+
 **Step 5 — Reconcile the bank result.** Go to **Bank Creation** → upload icon → `BANK_RESULT_SAMPLE.xlsx`.
 ✅ *Expected:* summary chips read **Payments in result 15 · Matched (CREATED) 13 · Diff to review 2**. Click the red **Diff to review** chip → it jumps to the first difference and the Difference column names the exact field (`Amount: bank … vs ours …`). Click again → second difference (wrong account). Type the bank's account into that row's Vendor Bank Account cell → the Match badge flips to **TRUE** instantly. A ⚠ appears on one SWIFT ending `B01` (branch-code review case).
 

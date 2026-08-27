@@ -45,6 +45,12 @@ Mở **Admin → Parse completeness control** (hoặc sheet PARSE_CONTROL trong 
 - Xác nhận debit **chỉ bằng giao dịch chi tiết trên sổ phụ** — biến động số dư không bao giờ được chấp nhận làm bằng chứng.
 - Reference trùng lịch sử bank → chặn cứng, muốn qua phải override có lý do.
 
+### 7. "Import batch mới thay data cũ — vậy check trùng với giao dịch ĐÃ THỰC HIỆN bằng gì?"
+- Batch mới chỉ thay **dữ liệu lệnh**, không thay **sổ lịch sử reference** (reference history register) — sổ này lưu vĩnh viễn, tự ghi thêm mỗi lần export ERP và mỗi lần import bank result.
+- Demo tại chỗ: export 1 entity → re-import đúng file AP đó → các lệnh đã export bị chặn `DUPLICATE` ngay, không thể export lại.
+- Xem sổ tại **Admin → Payment reference history**: đếm số reference, gõ thử 1 reference để kiểm tra, export CSV làm bằng chứng; xóa sổ phải xác nhận và bị ghi audit log.
+- *"A new import replaces the batch, never the reference history register — that register is exactly how a re-imported batch can never be paid twice."*
+
 ## Tuyệt đối KHÔNG nói
 - ❌ "Chính xác 100%" / "AI đảm bảo không sai"
 - ❌ Giấu các case NOT TESTED — ngược lại **chủ động khai** ("duplicate statement em chưa test, đã ghi trong Known Limitations") là điểm cộng với auditor

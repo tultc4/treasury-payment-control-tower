@@ -1258,6 +1258,16 @@ html[data-theme="dark"] .cash-status-banner.info{background:var(--blue-bg)}
   </div></div>
   <div class="section-title">Processing SLA & Holiday Calendar</div>
   <div class="grid-2"><div class="card"><h3>Bank processing rules</h3><div class="table-wrap" style="max-height:340px"><table id="processingRuleTable"></table></div></div><div class="card"><h3>Holiday calendar control</h3><div class="table-wrap" style="max-height:340px"><table id="holidayTable"></table></div></div></div>
+  <div class="section-title">Payment reference history register</div>
+  <div class="card">
+    <div class="bulk-fields" style="grid-template-columns:auto 1.6fr auto auto;align-items:end;max-width:860px">
+      <div class="field"><label>References on record</label><div style="font-size:22px;font-weight:700" id="refHistCount">0</div></div>
+      <div class="field"><label>Check a reference</label><input id="refHistQuery" type="text" placeholder="e.g. FA-PM260722001" oninput="checkRefHistory(this.value)"></div>
+      <button class="btn" onclick="exportRefHistory()">⇩ Export CSV</button>
+      <button class="btn" onclick="clearRefHistory()">Clear register…</button>
+    </div>
+    <div id="refHistAnswer" style="margin-top:8px;font-size:12.5px;color:var(--muted)">Grows automatically on every ERP export and bank-result import. A new AP import never clears it — that is the duplicate-payment control.</div>
+  </div>
   <div class="section-title">Parse completeness control</div>
   <div class="card"><div class="table-wrap" style="max-height:320px"><table id="parseControlTable"></table></div></div>
   <div class="section-title">Settings</div>
@@ -1543,11 +1553,12 @@ const idrProcessingExample = {
 };
 
 // Prior-batch references already observed in parsed bank history.
-const bankUsedReferences = new Set([
-  "FA-PM260701999",
-  "FA-PM260612777",
-  "FA-AV260630888"
-].map(normalizeReference));
+// Payment Reference History Register — every reference that has ever been
+// exported to ERP or confirmed in a bank result. Persisted in localStorage
+// and NEVER cleared by a new AP import (batches replace payment DATA, the
+// history register survives them). derivePaymentReferences() blocks any
+// fresh, not-yet-exported row whose reference is already in this register.
+window.refHistory = window.refHistory || new Set();
 
 // Additional UAT groups demonstrating the newly approved payment-reference rules.
 payments.push(
@@ -1693,7 +1704,7 @@ function derivePaymentReferences(){
     const key=normalizeReference(p.paymentReference);
     if(!key)p.referenceStatus="MISSING_REFERENCE";
     else if((counts.get(key)||0)>1)p.referenceStatus="DUPLICATE_IN_BATCH";
-    else if(bankUsedReferences.has(key))p.referenceStatus="DUPLICATE_IN_BANK";
+    else if(window.refHistory&&refHistory.has(key)&&!p.exported&&p.citi!=="CREATED")p.referenceStatus="DUPLICATE_IN_BANK";
     else if(p.manualReference)p.referenceStatus="MANUAL_OVERRIDE";
     else if(p.referenceRule==="AUTO_SUFFIX_BY_GROUP")p.referenceStatus="AUTO_SUFFIXED";
     else p.referenceStatus="UNIQUE";
@@ -2210,6 +2221,39 @@ function renderParseControl(){
   <tr><td colspan="11" style="color:var(--muted);font-size:11px">Imported ${esc(pc.at)} from ${esc(pc.source)} · rule: candidates = kept + out-of-window + restated + summary + no-amount + no-reference (+ headers/period). CHECK ⇒ re-parse before using the batch.</td></tr></tbody>`;
 }
 window.renderParseControl=renderParseControl;
+function renderRefHistory(){
+  const el=document.getElementById("refHistCount");
+  if(el)el.textContent=(window.refHistory?refHistory.size:0).toLocaleString();
+}
+function checkRefHistory(v){
+  const out=document.getElementById("refHistAnswer");if(!out)return;
+  const q=String(v||"").trim();
+  if(!q){out.style.color="var(--muted)";out.textContent="Grows automatically on every ERP export and bank-result import. A new AP import never clears it — that is the duplicate-payment control.";return;}
+  const hit=window.refHistory&&refHistory.has(normalizeReference(q));
+  out.style.color=hit?"var(--red)":"var(--green)";
+  out.textContent=hit?`⚠ "${q}" IS in the history register — a new payment with this reference will be blocked as DUPLICATE.`
+                     :`✓ "${q}" is not in the register — a payment with this reference would pass the duplicate check.`;
+}
+function exportRefHistory(){
+  if(!window.refHistory||!refHistory.size){showToast("The register is empty.");return;}
+  const csv="reference\r\n"+[...refHistory].sort().join("\r\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));
+  const d=new Date();a.download=`reference_history_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}.csv`;
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  showToast(`Exported ${refHistory.size} reference(s).`);
+}
+function clearRefHistory(){
+  if(!window.refHistory||!refHistory.size){showToast("The register is already empty.");return;}
+  if(!confirm(`Clear ALL ${refHistory.size} historical reference(s)?\n\nNew batches will no longer be checked against past payments until history is rebuilt (re-import past bank result files). This action is recorded on the audit log.`))return;
+  const n=refHistory.size;refHistory.clear();
+  if(window.persistState)persistState();
+  if(window.logEvent)logEvent("REFERENCE HISTORY CLEARED",`${n} reference(s) removed from the register`);
+  renderRefHistory();if(window.renderWorkbench)renderWorkbench();if(window.renderOverview)renderOverview();
+  showToast(`Cleared ${n} reference(s) from the register.`);
+}
+window.renderRefHistory=renderRefHistory;window.checkRefHistory=checkRefHistory;
+window.exportRefHistory=exportRefHistory;window.clearRefHistory=clearRefHistory;
 function operatorName(){return localStorage.getItem("tctOperator")||"Stella";}
 function logEvent(type,detail){
   auditLog.unshift({at:(d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`)(new Date()),by:operatorName(),type,detail:String(detail)});
@@ -2460,7 +2504,14 @@ function csvDate(v){
 }
 
 function csvRows(entity){derivePaymentReferences();const cols=["ORG_ID","SUPPLIER_NUM","AP_INVOICE_NUMBER","EFORM_NUMBER","PAYMENT_AMOUNT","DESCRIPTION","PAYMENT_METHOD","CHARGES_INDICATOR","ORDERING_PARTY","PURPOSE_CODE","","Value date","CREATED_BY"];const groups=payments.filter(p=>p.entity===entity&&p.include&&p.approved&&p.method&&p.charge&&p.ordering&&!p.referenceBlocked);const rows=groups.flatMap(p=>p.invoiceLines.map(line=>[p.org,p.supplier,line.invoice,p.paymentReference,line.amount,line.description||p.description,p.method,p.charge,orderingAccountFor(p.entity,p.currency),p.purpose||"",p.vendorAccount||"",csvDate(p.valueDate),p.createdBy||erpCreatedBy()]));return{cols,rows,groups};}
-function downloadEntityCSV(entity){const data=csvRows(entity);if(!data.rows.length){showToast("No ready ERP detail row is available for export.");return;}const entityBlocked=payments.some(p=>p.entity===entity&&p.include&&!["READY","EXPORTED"].includes(erpStatus(p)));if(entityBlocked){showToast(`${entity} is blocked. Resolve all selected payment groups before export.`);return;}const esc=v=>{let sv=String(v??"");if(/^[=+@\t\r]/.test(sv)||(/^-/.test(sv)&&!/^-?[\d.,]+$/.test(sv)))sv="'"+sv;return `"${sv.replaceAll('"','""')}"`;};const csv=[data.cols.map(esc).join(","),...data.rows.map(r=>r.map(esc).join(","))].join("\r\n");const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`ERP_UPLOAD_${entity.replace(/[^A-Za-z0-9]+/g,"_")}_2207.csv`;a.click();URL.revokeObjectURL(a.href);data.groups.forEach(p=>p.exported=true);showToast(`Created ${data.rows.length} ERP detail row(s) for ${entity}.`);if(window.logEvent)logEvent("ERP EXPORT",`${entity} — ${data.rows.length} row(s)`);renderErp();renderOverview();}
+function downloadEntityCSV(entity){const data=csvRows(entity);if(!data.rows.length){showToast("No ready ERP detail row is available for export.");return;}const entityBlocked=payments.some(p=>p.entity===entity&&p.include&&!["READY","EXPORTED"].includes(erpStatus(p)));if(entityBlocked){showToast(`${entity} is blocked. Resolve all selected payment groups before export.`);return;}const esc=v=>{let sv=String(v??"");if(/^[=+@\t\r]/.test(sv)||(/^-/.test(sv)&&!/^-?[\d.,]+$/.test(sv)))sv="'"+sv;return `"${sv.replaceAll('"','""')}"`;};const csv=[data.cols.map(esc).join(","),...data.rows.map(r=>r.map(esc).join(","))].join("\r\n");const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`ERP_UPLOAD_${entity.replace(/[^A-Za-z0-9]+/g,"_")}_2207.csv`;a.click();URL.revokeObjectURL(a.href);data.groups.forEach(p=>p.exported=true);
+  // record exported references into the history register: re-importing the
+  // same batch later can never silently export these again
+  let histAdded=0;
+  data.groups.forEach(p=>{const k=normalizeReference(p.paymentReference);if(k&&window.refHistory&&!refHistory.has(k)){refHistory.add(k);histAdded++;}});
+  if(window.persistState)persistState();
+  showToast(`Created ${data.rows.length} ERP detail row(s) for ${entity}.`);
+  if(window.logEvent){logEvent("ERP EXPORT",`${entity} — ${data.rows.length} row(s)`);if(histAdded)logEvent("REFERENCE HISTORY",`+${histAdded} reference(s) recorded from ${entity} export`);}renderErp();renderOverview();}
 function downloadAllReady(){const groups=entityExportData().filter(g=>g.arr.length&&!g.blocked.length);groups.forEach((g,i)=>setTimeout(()=>downloadEntityCSV(g.entity),i*250));if(!groups.length)showToast("No entity currently passes all export controls.");}
 
 function renderCiti(){
@@ -2947,6 +2998,7 @@ function renderCalendar(){
 function renderMasterTables(){
   if(window.renderAuditLog)renderAuditLog();
   if(window.renderParseControl)renderParseControl();
+  if(window.renderRefHistory)renderRefHistory();
   const opI=document.getElementById("operatorNameInput"),cbI=document.getElementById("erpCreatedByInput");
   if(opI&&!opI.value)opI.value=window.operatorName?operatorName():"Stella";
   if(cbI&&!cbI.value)cbI.value=localStorage.getItem("tctErpCreatedBy")||CREATED_BY_DEFAULT;
@@ -3545,7 +3597,10 @@ if(location.hash)history.replaceState(null,"",location.pathname+location.search)
         p.citi = 'NOT_CREATED';
       }
     });
+    const histAdded = used.size - (window.refHistory ? refHistory.size : 0);
     state.bankUsedReferences = used;
+    window.refHistory = used;
+    if (histAdded > 0 && window.logEvent) logEvent('REFERENCE HISTORY', `+${histAdded} reference(s) recorded from bank result`);
     state.lastRefresh = new Date();
     state.audit = state.audit || [];
     state.audit.unshift(`Bank result imported: ${files.length} file(s)`);
@@ -3733,6 +3788,10 @@ function openApImport(){ document.getElementById('apImportInput').click(); }
     const ribbon = document.querySelector('.demo-ribbon');
     if (ribbon) ribbon.textContent = 'INTERACTIVE UI DRAFT v0.4 · AP upload = select one AP summary workbook · Bank Result = upload the bank creation workbook · Statement = upload the transaction-level statement file';
     restorePersistedState();
+    state.bankUsedReferences = state.bankUsedReferences instanceof Set
+      ? state.bankUsedReferences : new Set(state.bankUsedReferences || []);
+    window.refHistory = state.bankUsedReferences;
+    window.persistState = persistState;
     state.audit = state.audit || [];
     state.audit.unshift('Browser import layer loaded.');
     refreshAll();
