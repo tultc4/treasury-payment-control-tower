@@ -1078,7 +1078,7 @@ html[data-theme="dark"] .cash-status-banner.info{background:var(--blue-bg)}
   <div class="rail-foot">
     <div style="display:flex;align-items:center;gap:9px">
       <span class="rail-ava">S</span>
-      <div><strong style="margin-top:0">Stella</strong><span>Oversea Treasury</span></div>
+      <div><strong style="margin-top:0">Stella</strong><span>Oversea Treasury · <span id="appVersion"></span></span></div>
     </div>
   </div>
 </nav>
@@ -1242,7 +1242,7 @@ html[data-theme="dark"] .cash-status-banner.info{background:var(--blue-bg)}
 
 
 <section id="master" class="tabpanel">
-  <div class="page-head"><div><h2>Admin — Master Data & Audit</h2></div></div>
+  <div class="page-head"><div><h2>Admin — Master Data & Audit</h2></div><div class="wb-tools" style="align-items:center"><span class="muted" style="font-size:11.5px" id="adminVersion"></span></div></div>
   <div class="grid-3">
     <div class="card"><h3>Account master</h3><div class="validation-list"><div class="validation-item"><span>Active bank accounts</span><strong>49</strong></div><div class="validation-item"><span>Entity coverage</span><strong>8</strong></div><div class="validation-item"><span>Unmapped statement accounts</span><strong>0</strong></div></div></div>
     <div class="card"><h3>Payment-reference control</h3><div class="validation-list"><div class="validation-item"><span>PAYMENT_GROUP_ID</span><span class="status good">Required</span></div><div class="validation-item"><span>SOURCE_FILE / SOURCE_ROW</span><span class="status good">Required</span></div><div class="validation-item"><span>ORIGINAL_EFORM</span><span class="status good">Required</span></div><div class="validation-item"><span>MANUAL_REFERENCE_OVERRIDE</span><span class="status info">Optional</span></div></div></div>
@@ -1559,6 +1559,10 @@ const idrProcessingExample = {
 // history register survives them). derivePaymentReferences() blocks any
 // fresh, not-yet-exported row whose reference is already in this register.
 window.refHistory = window.refHistory || new Set();
+
+// ---- App version: bump on every release; shown in the rail + Admin ----
+window.APP_VERSION = "1.0.0";
+window.APP_BUILD   = "2026-09-05";
 
 // Additional UAT groups demonstrating the newly approved payment-reference rules.
 payments.push(
@@ -2276,7 +2280,7 @@ function saveOperatorName(v){
   if(window.showToast)showToast("Operator name saved: "+name);
 }
 window.saveOperatorName=saveOperatorName;
-document.addEventListener("DOMContentLoaded",()=>{const st=document.querySelector(".rail-foot strong"),av=document.querySelector(".rail-ava");const n=operatorName();if(st)st.textContent=n;if(av)av.textContent=n.charAt(0).toUpperCase();});
+document.addEventListener("DOMContentLoaded",()=>{const st=document.querySelector(".rail-foot strong"),av=document.querySelector(".rail-ava");const n=operatorName();if(st)st.textContent=n;if(av)av.textContent=n.charAt(0).toUpperCase();const vv=document.getElementById("appVersion");if(vv)vv.textContent="v"+APP_VERSION;});
 function applyTheme(t){
   document.documentElement.setAttribute("data-theme",t);
   try{localStorage.setItem("tctTheme",t);}catch(e){}
@@ -2996,6 +3000,7 @@ function renderCalendar(){
   document.getElementById("processingTable").innerHTML=`<thead><tr><th>Entity</th><th>Payment Bank</th><th>Payment Reference</th><th>Currency</th><th class="num">Amount</th><th>Value Date</th><th>Processing Rule</th><th>Calendar</th><th>Adjustment Note</th><th>Expected Completion</th><th>Timing Status</th><th>Debit Status</th></tr></thead><tbody>${rows.map(({p,info})=>`<tr><td class="entity-name">${p.entity}</td><td>${escapeHtml(paymentBankLabel(p))}</td><td><span class="payment-ref">${escapeHtml(p.paymentReference)}</span></td><td>${p.currency}</td><td class="num">${fmt(p.amount,p.currency)}</td><td>${dateLabel(p.valueDate)}</td><td>${escapeHtml(info.ruleLabel)}</td><td>${escapeHtml(info.calendarName||"-")}</td><td>${escapeHtml(info.adjustmentNote)}</td><td>${dateLabel(info.expected)}</td><td>${timingHtml(info)}</td><td>${statusPill(p.debit)}</td></tr>`).join("")||'<tr><td colspan="12">No payment matches the selected filters.</td></tr>'}</tbody>`;
 }
 function renderMasterTables(){
+  const av2=document.getElementById("adminVersion");if(av2)av2.textContent=`Treasury Control Tower v${window.APP_VERSION} · build ${window.APP_BUILD}`;
   if(window.renderAuditLog)renderAuditLog();
   if(window.renderParseControl)renderParseControl();
   if(window.renderRefHistory)renderRefHistory();
